@@ -14,7 +14,10 @@ import {
 
 import {
    setContract,
-   sharesLoaded
+   sharesLoaded,
+   swapRequest,
+   swapSuccess,
+   swapFail
 } from './reducers/amm'
 
 import TOKEN_ABI from '../abis/Token.json';
@@ -71,6 +74,32 @@ export const loadBalances = async (amm, tokens, account, dispatch) => {
       ethers.utils.formatUnits(balance2.toString(), 'ether')
    ]))
 
-   const shares = await amm.shares(account)
+   const shares = await amm.shares(dispatch)
    dispatch(sharesLoaded(ethers.utils.formatUnits(shares.toString(), 'ether')))
+} 
+
+export const swap = async (provider, amm, token, symbol, amount, dispatch) => {
+   try {
+      dispatch(swapRequest())
+
+      let transaction
+
+      const signer = await provider.getSigner()
+
+      transaction = await token.connect(signer).approver(amm.address, amount)
+      await transaction.wait()
+
+      if (symbol === "MNSA") {
+         transaction = await amm.connect(signer).swapToken1(amount)
+      } else {
+         transaction = await amm.connect(signer).swapToken2(amount)
+      }
+      await transaction.wait()
+
+      dispatch(swapSuccess(transaction.hash))
+
+   } catch (error) {
+      dispatch(swapFail())
+   }
+  
 }

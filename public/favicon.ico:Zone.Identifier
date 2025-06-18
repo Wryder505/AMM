@@ -1,4 +1,0 @@
-[ZoneTransfer]
-ZoneId=3
-ReferrerUrl=https://cloudconvert.com/
-HostUrl=https://us-east.storage.cloudconvert.com/tasks/b8ddc13e-7999-4369-8c62-581fc98c61e2/Logo%20-%20Copy.ico?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Content-Sha256=UNSIGNED-PAYLOAD&X-Amz-Credential=cloudconvert-production%2F20250614%2Fva%2Fs3%2Faws4_request&X-Amz-Date=20250614T155754Z&X-Amz-Expires=86400&X-Amz-Signature=70dceebddac01b38c3dbe62848bd06f79c9ead4d58169059eaab84fc1713f795&X-Amz-SignedHeaders=host&response-content-disposition=attachment%3B%20filename%3D%22Logo%20-%20Copy.ico%22&response-content-type=image%2Fvnd.microsoft.icon&x-id=GetObject
