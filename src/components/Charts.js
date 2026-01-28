@@ -33,7 +33,7 @@ const Charts = () => {
 
 	return (
 		<div>
-			{provider && amm ? (
+			{provider && amm && tokens && tokens.length >= 2 ? (
 				<div>
 					<Chart
 						type="line"
@@ -58,7 +58,7 @@ const Charts = () => {
 							</tr>
 						</thead>
 					<tbody>
-						{chart.swaps && chart.swaps.map((swap, index) => (
+						{chart && chart.swaps && chart.swaps.map((swap, index) => (
 							<tr key={index}>
 								<td>{swap.hash.slice(0, 5) + '...' + swap.hash.slice(61, 66)}</td>
 								<td>{swap.args.tokenGive === tokens[0].address ? symbols[0] : symbols[1]}</td>

@@ -100,18 +100,31 @@ const Swap = () => {
 			return
 		}
 
-		if(inputToken === 'MNSA') {
-			setPrice(await amm.token2Balance() / await amm.token1Balance())
-		} else {
-			setPrice(await amm.token1Balance() / await amm.token2Balance())
+		if (!amm) {
+			console.warn('AMM contract not loaded')
+			return
+		}
+
+		try {
+			if(inputToken === 'MNSA') {
+				const token2Balance = await amm.token2Balance()
+				const token1Balance = await amm.token1Balance()
+				setPrice(token2Balance / token1Balance)
+			} else {
+				const token1Balance = await amm.token1Balance()
+				const token2Balance = await amm.token2Balance()
+				setPrice(token1Balance / token2Balance)
+			}
+		} catch (error) {
+			console.error('Error getting price:', error)
 		}
 	}
 
 	useEffect(() => {
-		if(inputToken && outputToken) {	
+		if(inputToken && outputToken && amm) {	
 			getPrice()
 		}	
-	}, [inputToken, outputToken]);
+	}, [inputToken, outputToken, amm]);
 
 	return (
 		<div>

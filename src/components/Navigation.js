@@ -20,14 +20,44 @@ const Navigation = () => {
 
   const connectHandler = async () => {
     const account = await loadAccount(dispatch)
-    await loadBalances(amm, tokens, account, dispatch)
+    if (tokens && tokens.length >= 2 && amm) {
+      await loadBalances(amm, tokens, account, dispatch)
+    }
   }
 
-    const networkHandler = async (e) => {
+  const networkHandler = async (e) => {
+    const selectedChainId = e.target.value
+    
+    if (selectedChainId === '0') {
+      return // Don't switch if "Select Network" is clicked
+    }
+
+    try {
+      console.log(`Attempting to switch to network: ${selectedChainId}`)
       await window.ethereum.request({
         method: 'wallet_switchEthereumChain',
-        params: [{ chainId : e.target.value }],
+        params: [{ chainId: selectedChainId }],
       })
+    } catch (error) {
+      console.error('Error switching network:', error)
+      
+      // If network doesn't exist in MetaMask, try adding it
+      if (error.code === 4902) {
+        console.log('Network not found in MetaMask, attempting to add it')
+        try {
+          await window.ethereum.request({
+            method: 'wallet_addEthereumChain',
+            params: [{
+              chainId: selectedChainId,
+              chainName: selectedChainId === '0x7A69' ? 'Hardhat' : 'Goerli',
+              rpcUrls: [selectedChainId === '0x7A69' ? 'http://127.0.0.1:8545' : 'https://goerli.infura.io/v3/YOUR_INFURA_KEY'],
+            }],
+          })
+        } catch (addError) {
+          console.error('Error adding network:', addError)
+        }
+      }
+    }
   }
 
   return (

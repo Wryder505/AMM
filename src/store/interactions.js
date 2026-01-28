@@ -56,33 +56,55 @@ export const loadAccount = async (dispatch) => {
 /////////////////////////////////////// LOAD CONTRACTS //////////////////////////////////////
 
 export const loadTokens = async (provider, chainId, dispatch) => {
-   const mensa = new ethers.Contract(config[chainId].mensa.address, TOKEN_ABI, provider)
-   const usd = new ethers.Contract(config[chainId].usd.address, TOKEN_ABI, provider)
+   try {
+      if (!config[chainId]) {
+         console.warn(`No contract configuration found for network ${chainId}. Please deploy contracts to this network.`)
+         return
+      }
+      
+      const mensa = new ethers.Contract(config[chainId].mensa.address, TOKEN_ABI, provider)
+      const usd = new ethers.Contract(config[chainId].usd.address, TOKEN_ABI, provider)
 
-   dispatch(setContracts([mensa, usd]))
-   dispatch(setSymbols([await mensa.symbol(), await usd.symbol()]))
+      dispatch(setContracts([mensa, usd]))
+      dispatch(setSymbols([await mensa.symbol(), await usd.symbol()]))
+   } catch (error) {
+      console.error('Error loading tokens:', error)
+   }
 }
 export const loadAMM = async (provider, chainId, dispatch) => {
-   const amm = new ethers.Contract(config[chainId].amm.address, AMM_ABI, provider)
-   
-   dispatch(setContract([amm]))
+   try {
+      if (!config[chainId]) {
+         console.warn(`No contract configuration found for network ${chainId}`)
+         return
+      }
+      
+      const amm = new ethers.Contract(config[chainId].amm.address, AMM_ABI, provider)
+      
+      dispatch(setContract(amm))
 
-   return amm
+      return amm
+   } catch (error) {
+      console.error('Error loading AMM:', error)
+   }
 }
 
 /////////////////////////////// LOAD BALANCES & SHARES ///////////////////////////////////
 
 export const loadBalances = async (amm, tokens, account, dispatch) => {
-   const balance1 = await tokens[0].balanceOf(account)
-   const balance2 = await tokens[1].balanceOf(account)
+   try {
+      const balance1 = await tokens[0].balanceOf(account)
+      const balance2 = await tokens[1].balanceOf(account)
 
-   dispatch(balancesLoaded([
-      ethers.utils.formatUnits(balance1.toString(), 'ether'),
-      ethers.utils.formatUnits(balance2.toString(), 'ether')
-   ]))
-   
-   const shares = await amm.shares(account)
-   dispatch(sharesLoaded(ethers.utils.formatUnits(shares.toString(), 'ether')))
+      dispatch(balancesLoaded([
+         ethers.utils.formatUnits(balance1.toString(), 'ether'),
+         ethers.utils.formatUnits(balance2.toString(), 'ether')
+      ]))
+      
+      const shares = await amm.shares(account)
+      dispatch(sharesLoaded(ethers.utils.formatUnits(shares.toString(), 'ether')))
+   } catch (error) {
+      console.error('Error loading balances:', error)
+   }
 } 
 
 //////////////////////////////////// ADD LIQUIDITY ////////////////////////////////////////
@@ -137,7 +159,7 @@ export const swap = async (provider, amm, token, symbol, amount, dispatch) => {
 
       const signer = await provider.getSigner()
 
-      transaction = await token.connect(signer).approver(amm.address, amount)
+      transaction = await token.connect(signer).approve(amm.address, amount)
       await transaction.wait()
 
       if (symbol === "MNSA") {
@@ -158,12 +180,19 @@ export const swap = async (provider, amm, token, symbol, amount, dispatch) => {
 ////////////////////////////////////// LOAD ALL SWAPS ///////////////////////////////////////////
 
 export const loadAllSwaps = async (provider, amm, dispatch) => {
-   const block = await provider.getBlockNumber()
+   try {
+      const block = await provider.getBlockNumber()
+      console.log(`Current block: ${block}`)
 
-   const swapStream = await amm.queryFilter('Swap', 0, block)
-   const swaps = swapStream.map(event => {
-      return { hash: event.transactionHash, args: event.args }
-   })
+      const swapStream = await amm.queryFilter('Swap', 0, block)
+      console.log(`Found ${swapStream.length} swap events`)
+      
+      const swaps = swapStream.map(event => {
+         return { hash: event.transactionHash, args: event.args }
+      })
 
-   dispatch(swapsLoaded(swaps))
-}
+      dispatch(swapsLoaded(swaps))
+   } catch (error) {
+      console.error('Error loading swaps:', error)
+      dispatch(swapsLoaded([]))
+   }}
