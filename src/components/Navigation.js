@@ -7,7 +7,7 @@ import Blockies from 'react-blockies'
 
 import logo from '../logo.png';
 
-import { loadAccount, loadBalances } from '../store/interactions'
+import { loadAccount, loadBalances, loadTokens, loadAMM, loadNetwork } from '../store/interactions'
 
 import config from '../config.json'
 
@@ -48,14 +48,21 @@ const Navigation = () => {
   const account = useSelector(state => state.provider.account)
   const tokens = useSelector(state => state.tokens.contracts)
   const amm = useSelector(state => state.amm.contract)
+  const provider = useSelector(state => state.provider.connection)
 
   const dispatch = useDispatch()
   const selectRef = useRef(null)
 
   const connectHandler = async () => {
     const account = await loadAccount(dispatch)
-    if (tokens && tokens.length >= 2 && amm) {
-      await loadBalances(amm, tokens, account, dispatch)
+    // Reload tokens and AMM for current network to get fresh contracts
+    if (provider && chainId) {
+      const tokens = await loadTokens(provider, chainId, dispatch)
+      const ammContract = await loadAMM(provider, chainId, dispatch)
+      
+      if (ammContract && tokens && tokens.length >= 2 && account) {
+        await loadBalances(ammContract, tokens, account, dispatch)
+      }
     }
   }
 
@@ -73,6 +80,24 @@ const Navigation = () => {
         params: [{ chainId: selectedChainId }],
       })
       console.log('Successfully switched network')
+      
+      // Wait for network to fully switch, then reload contracts for new network
+      setTimeout(async () => {
+        try {
+          const newChainId = parseInt(selectedChainId, 16)
+          console.log(`Loading contracts for chain ${newChainId}`)
+          await loadTokens(provider, newChainId, dispatch)
+          const newAmm = await loadAMM(provider, newChainId, dispatch)
+          const currentAccount = await loadAccount(dispatch)
+          
+          // Load balances for new network
+          if (newAmm && currentAccount) {
+            await loadBalances(newAmm, tokens, currentAccount, dispatch)
+          }
+        } catch (reloadError) {
+          console.error('Error reloading contracts after network switch:', reloadError)
+        }
+      }, 500)
     } catch (error) {
       console.error('Error switching network:', error)
       
@@ -100,6 +125,23 @@ const Navigation = () => {
             method: 'wallet_switchEthereumChain',
             params: [{ chainId: selectedChainId }],
           })
+          
+          // Load contracts for new network
+          setTimeout(async () => {
+            try {
+              const newChainId = parseInt(selectedChainId, 16)
+              console.log(`Loading contracts for chain ${newChainId}`)
+              await loadTokens(provider, newChainId, dispatch)
+              const newAmm = await loadAMM(provider, newChainId, dispatch)
+              const currentAccount = await loadAccount(dispatch)
+              
+              if (newAmm && currentAccount) {
+                await loadBalances(newAmm, tokens, currentAccount, dispatch)
+              }
+            } catch (reloadError) {
+              console.error('Error reloading contracts after network add:', reloadError)
+            }
+          }, 500)
         } catch (addError) {
           console.error('Error adding network:', addError)
           // Reset the selector to the current chain

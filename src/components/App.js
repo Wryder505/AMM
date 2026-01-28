@@ -17,7 +17,8 @@ import {
   loadNetwork,
   loadAccount,
   loadTokens,
-  loadAMM
+  loadAMM,
+  loadBalances
 } from '../store/interactions'
 
 function App() {
@@ -30,17 +31,45 @@ function App() {
     const provider = await loadProvider(dispatch)
     // Fetch current network's chainId (e.g. hardhat: 31337, kovan: 42)
     const chainId = await loadNetwork(provider, dispatch)
-    // Reload page when network changes
-    window.ethereum.on('chainChanged', () => {
-      window.location.reload()
-    })
-    // Fetch current account from Metamask when changed
-    window.ethereum.on('accountsChanged', async () => {
-      await loadAccount(dispatch)
-    })
+    
+    // Setup event listeners for network and account changes
+    if (window.ethereum) {
+      window.ethereum.on('chainChanged', async () => {
+        // Reload blockchain data when network changes
+        const newChainId = await loadNetwork(provider, dispatch)
+        await loadTokens(provider, newChainId, dispatch)
+        const amm = await loadAMM(provider, newChainId, dispatch)
+        
+        // Load account and balances for new network
+        const account = await loadAccount(dispatch)
+        if (amm && account) {
+          await loadTokens(provider, newChainId, dispatch)
+        }
+      })
+      
+      window.ethereum.on('accountsChanged', async () => {
+        await loadAccount(dispatch)
+      })
+    }
+    
     // Initiate contracts
     await loadTokens(provider, chainId, dispatch)
-    await loadAMM(provider, chainId, dispatch)
+    const amm = await loadAMM(provider, chainId, dispatch)
+    
+    // Auto-load account and balances on startup
+    try {
+      const account = await loadAccount(dispatch)
+      if (amm && account && account !== ethers.constants.AddressZero) {
+        console.log('Auto-loading balances for account:', account)
+        // Re-fetch tokens to ensure we have the token contracts
+        const tokensLoaded = await loadTokens(provider, chainId, dispatch)
+        if (tokensLoaded) {
+          await loadBalances(amm, tokensLoaded, account, dispatch)
+        }
+      }
+    } catch (error) {
+      console.log('User has not connected wallet yet:', error.message)
+    }
   }
 
   useEffect(() => {

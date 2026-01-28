@@ -17,6 +17,19 @@ import {
 	loadBalances
 } from '../store/interactions'
 
+// List of popular tokens (placeholder data - would need real token contracts)
+const POPULAR_TOKENS = [
+	{ symbol: 'USDC', name: 'USD Coin', logo: '💵' },
+	{ symbol: 'USDT', name: 'Tether', logo: '₮' },
+	{ symbol: 'DAI', name: 'Dai', logo: 'Ⓓ' },
+	{ symbol: 'WETH', name: 'Wrapped Ether', logo: 'Ξ' },
+	{ symbol: 'WBTC', name: 'Wrapped Bitcoin', logo: '₿' },
+	{ symbol: 'LINK', name: 'Chainlink', logo: '🔗' },
+	{ symbol: 'AAVE', name: 'Aave', logo: 'A' },
+	{ symbol: 'UNI', name: 'Uniswap', logo: 'U' },
+	{ symbol: 'MATIC', name: 'Polygon', logo: 'M' },
+	{ symbol: 'CRV', name: 'Curve', logo: 'C' },
+]
 
 const Swap = () => {
 	const [inputToken, setInputToken] = useState(null)
@@ -42,6 +55,15 @@ const Swap = () => {
 
 	const dispatch = useDispatch()
 
+	// Get balance for selected token
+	const getTokenBalance = (tokenSymbol) => {
+		if (!symbols || !balances) return '0'
+		if (balances.length < 2) return '0'
+		if (tokenSymbol === symbols[0]) return balances[0] || '0'
+		if (tokenSymbol === symbols[1]) return balances[1] || '0'
+		return '0' // Popular tokens don't have balances yet
+	}
+
 	const inputHandler = async (e) => {
 		if (!inputToken || !outputToken) {
 			window.alert('Please select token')
@@ -57,7 +79,7 @@ const Swap = () => {
 		}
 
 		try {
-			if (inputToken === 'MNSA') {
+			if (inputToken === symbols[0]) {
 				setInputAmount(e.target.value)
 
 				const _token1Amount = ethers.utils.parseUnits(e.target.value, 'ether')
@@ -65,7 +87,7 @@ const Swap = () => {
 				const _token2Amount = ethers.utils.formatUnits(result.toString(), 'ether')
 
 				setOutputAmount(_token2Amount.toString())
-			} else {
+			} else if (inputToken === symbols[1]) {
 				setInputAmount(e.target.value)
 
 				const _token2Amount = ethers.utils.parseUnits(e.target.value, 'ether')
@@ -73,6 +95,10 @@ const Swap = () => {
 				const _token1Amount = ethers.utils.formatUnits(result.toString(), 'ether')
 
 				setOutputAmount(_token1Amount.toString())
+			} else {
+				// Popular tokens - just show placeholder
+				setInputAmount(e.target.value)
+				setOutputAmount('0')
 			}
 		} catch (error) {
 			console.error('Error calculating swap output:', error)
@@ -90,9 +116,15 @@ const Swap = () => {
 			return
 		}
 
+		// Only allow swaps with deployed tokens
+		if (!symbols || (!symbols.includes(inputToken) || !symbols.includes(outputToken))) {
+			window.alert('Can only swap between MNSA and USD tokens currently')
+			return
+		}
+
 		const _inputAmount = ethers.utils.parseUnits(inputAmount, 'ether')
 
-		if (inputToken === "MNSA") {
+		if (inputToken === symbols[0]) {
 			await swap(provider, amm, tokens[0], inputToken, _inputAmount, dispatch)
 		} else {
 			await swap(provider, amm, tokens[1], inputToken, _inputAmount, dispatch)
@@ -116,19 +148,29 @@ const Swap = () => {
 		}
 
 		try {
-			if(inputToken === 'MNSA') {
+			if(inputToken === symbols[0]) {
 				const token2Balance = await amm.token2Balance()
 				const token1Balance = await amm.token1Balance()
 				setPrice(token2Balance / token1Balance)
-			} else {
+			} else if (inputToken === symbols[1]) {
 				const token1Balance = await amm.token1Balance()
 				const token2Balance = await amm.token2Balance()
 				setPrice(token1Balance / token2Balance)
+			} else {
+				setPrice(0)
 			}
 		} catch (error) {
 			console.error('Error getting price:', error)
 		}
 	}
+
+	// Auto-load balances when amm and tokens are available
+	useEffect(() => {
+		if (amm && tokens && tokens.length >= 2 && account) {
+			console.log('Loading balances...')
+			loadBalances(amm, tokens, account, dispatch)
+		}
+	}, [amm, tokens, account])
 
 	useEffect(() => {
 		if(inputToken && outputToken && amm) {	
@@ -146,13 +188,7 @@ const Swap = () => {
 							<div className='d-flex justify-content-between'>
 								<Form.Label><strong>Input:</strong></Form.Label>
 								<Form.Text muted>
-									Balance: {
-										inputToken === symbols[0] ? (
-											balances[0]
-										) : inputToken === symbols[1] ? (
-											balances[1]
-										) : 0
- 									}
+									Balance: {getTokenBalance(inputToken)}
 								</Form.Text>
 							</div>
 							<InputGroup>
@@ -166,10 +202,26 @@ const Swap = () => {
 								/>
 									<DropdownButton
 										variant="outline-secondary"
-										title={inputToken ? inputToken : "Select Token"}
+										title={inputToken ? `${inputToken} (${getTokenBalance(inputToken)})` : "Select Token"}
 									>
-										<Dropdown.Item onClick={(e) => setInputToken(e.target.innerHTML)} >MNSA</Dropdown.Item>
-										<Dropdown.Item onClick={(e) => setInputToken(e.target.innerHTML)} >USD</Dropdown.Item>
+										<Dropdown.Header>Your Tokens</Dropdown.Header>
+										{symbols && symbols[0] && (
+											<Dropdown.Item onClick={() => setInputToken(symbols[0])}>
+												{symbols[0]} - Balance: {balances[0]}
+											</Dropdown.Item>
+										)}
+										{symbols && symbols[1] && (
+											<Dropdown.Item onClick={() => setInputToken(symbols[1])}>
+												{symbols[1]} - Balance: {balances[1]}
+											</Dropdown.Item>
+										)}
+										<Dropdown.Divider />
+										<Dropdown.Header>Popular Tokens</Dropdown.Header>
+										{POPULAR_TOKENS.map((token) => (
+											<Dropdown.Item key={token.symbol} onClick={() => setInputToken(token.symbol)}>
+												{token.logo} {token.symbol} - {token.name}
+											</Dropdown.Item>
+										))}
 									</DropdownButton>
 							</InputGroup>
 						</Row>
@@ -178,13 +230,7 @@ const Swap = () => {
 							<div className='d-flex justify-content-between'>
 								<Form.Label><strong>Output:</strong></Form.Label>
 								<Form.Text muted>
-									Balance: {
-										outputToken === symbols[0] ? (
-											balances[0]
-										) : outputToken === symbols[1] ? (
-											balances[1]
-										) : 0
-									}
+									Balance: {getTokenBalance(outputToken)}
 								</Form.Text>
 							</div>
 							<InputGroup>
@@ -196,10 +242,26 @@ const Swap = () => {
 								/>
 									<DropdownButton
 										variant="outline-secondary"
-										title={outputToken ? outputToken : "Select Token"}
+										title={outputToken ? `${outputToken} (${getTokenBalance(outputToken)})` : "Select Token"}
 									>
-										<Dropdown.Item onClick={(e) => setOutputToken(e.target.innerHTML)} >MNSA</Dropdown.Item>
-										<Dropdown.Item onClick={(e) => setOutputToken(e.target.innerHTML)} >USD</Dropdown.Item>
+										<Dropdown.Header>Your Tokens</Dropdown.Header>
+										{symbols && symbols[0] && (
+											<Dropdown.Item onClick={() => setOutputToken(symbols[0])}>
+												{symbols[0]} - Balance: {balances[0]}
+											</Dropdown.Item>
+										)}
+										{symbols && symbols[1] && (
+											<Dropdown.Item onClick={() => setOutputToken(symbols[1])}>
+												{symbols[1]} - Balance: {balances[1]}
+											</Dropdown.Item>
+										)}
+										<Dropdown.Divider />
+										<Dropdown.Header>Popular Tokens</Dropdown.Header>
+										{POPULAR_TOKENS.map((token) => (
+											<Dropdown.Item key={token.symbol} onClick={() => setOutputToken(token.symbol)}>
+												{token.logo} {token.symbol} - {token.name}
+											</Dropdown.Item>
+										))}
 									</DropdownButton>
 							</InputGroup>
 						</Row>

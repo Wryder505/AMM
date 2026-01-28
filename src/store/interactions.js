@@ -59,7 +59,7 @@ export const loadTokens = async (provider, chainId, dispatch) => {
    try {
       if (!config[chainId]) {
          console.warn(`No contract configuration found for network ${chainId}. Please deploy contracts to this network.`)
-         return
+         return null
       }
       
       const mensa = new ethers.Contract(config[chainId].mensa.address, TOKEN_ABI, provider)
@@ -67,15 +67,18 @@ export const loadTokens = async (provider, chainId, dispatch) => {
 
       dispatch(setContracts([mensa, usd]))
       dispatch(setSymbols([await mensa.symbol(), await usd.symbol()]))
+      
+      return [mensa, usd]
    } catch (error) {
       console.error('Error loading tokens:', error)
+      return null
    }
 }
 export const loadAMM = async (provider, chainId, dispatch) => {
    try {
       if (!config[chainId]) {
          console.warn(`No contract configuration found for network ${chainId}`)
-         return
+         return null
       }
       
       const amm = new ethers.Contract(config[chainId].amm.address, AMM_ABI, provider)
@@ -85,6 +88,7 @@ export const loadAMM = async (provider, chainId, dispatch) => {
       return amm
    } catch (error) {
       console.error('Error loading AMM:', error)
+      return null
    }
 }
 
