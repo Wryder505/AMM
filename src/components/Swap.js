@@ -51,22 +51,32 @@ const Swap = () => {
 			window.alert('Invalid token pair')
 			return
 		}
-		if (inputToken === 'MNSA') {
-			setInputAmount(e.target.value)
+		if (!amm) {
+			window.alert('AMM contract not loaded yet')
+			return
+		}
 
-			const _token1Amount = ethers.utils.parseUnits(e.target.value, 'ether')
-			const result = await amm.calculateToken1Swap(_token1Amount)
-			const _token2Amount = ethers.utils.formatUnits(result.toString(), 'ether')
+		try {
+			if (inputToken === 'MNSA') {
+				setInputAmount(e.target.value)
 
-			setOutputAmount(_token2Amount.toString())
-		} else {
-			setInputAmount(e.target.value)
+				const _token1Amount = ethers.utils.parseUnits(e.target.value, 'ether')
+				const result = await amm.calculateToken1Swap(_token1Amount)
+				const _token2Amount = ethers.utils.formatUnits(result.toString(), 'ether')
 
-			const _token2Amount = ethers.utils.parseUnits(e.target.value, 'ether')
-			const result = await amm.calculateToken2Swap(_token2Amount)
-			const _token1Amount = ethers.utils.formatUnits(result.toString(), 'ether')
+				setOutputAmount(_token2Amount.toString())
+			} else {
+				setInputAmount(e.target.value)
 
-			setOutputAmount(_token1Amount.toString())
+				const _token2Amount = ethers.utils.parseUnits(e.target.value, 'ether')
+				const result = await amm.calculateToken2Swap(_token2Amount)
+				const _token1Amount = ethers.utils.formatUnits(result.toString(), 'ether')
+
+				setOutputAmount(_token1Amount.toString())
+			}
+		} catch (error) {
+			console.error('Error calculating swap output:', error)
+			setOutputAmount(0)
 		}
 	}
 

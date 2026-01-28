@@ -1,4 +1,5 @@
 import { useSelector, useDispatch } from 'react-redux'
+import { useRef } from 'react'
 import Navbar from 'react-bootstrap/Navbar'
 import Form from 'react-bootstrap/Form'
 import Button from 'react-bootstrap/Button'
@@ -10,6 +11,38 @@ import { loadAccount, loadBalances } from '../store/interactions'
 
 import config from '../config.json'
 
+// Network configurations for adding chains to MetaMask
+const NETWORKS = {
+  '0x1': {
+    name: 'Ethereum Mainnet',
+    rpc: 'https://eth-mainnet.g.alchemy.com/v2/demo',
+  },
+  '0x89': {
+    name: 'Polygon',
+    rpc: 'https://polygon-rpc.com/',
+  },
+  '0xa4b1': {
+    name: 'Arbitrum One',
+    rpc: 'https://arb1.arbitrum.io/rpc',
+  },
+  '0xa': {
+    name: 'Optimism',
+    rpc: 'https://mainnet.optimism.io',
+  },
+  '0x8453': {
+    name: 'Base',
+    rpc: 'https://mainnet.base.org',
+  },
+  '0x5': {
+    name: 'Goerli Testnet',
+    rpc: 'https://goerli.infura.io/v3/9aa3d95b3bc440fa88ea12eaa4456161',
+  },
+  '0x7A69': {
+    name: 'Hardhat Localhost',
+    rpc: 'http://127.0.0.1:8545',
+  },
+}
+
 const Navigation = () => {
   const chainId = useSelector(state => state.provider.chainId)
   const account = useSelector(state => state.provider.account)
@@ -17,6 +50,7 @@ const Navigation = () => {
   const amm = useSelector(state => state.amm.contract)
 
   const dispatch = useDispatch()
+  const selectRef = useRef(null)
 
   const connectHandler = async () => {
     const account = await loadAccount(dispatch)
@@ -38,6 +72,7 @@ const Navigation = () => {
         method: 'wallet_switchEthereumChain',
         params: [{ chainId: selectedChainId }],
       })
+      console.log('Successfully switched network')
     } catch (error) {
       console.error('Error switching network:', error)
       
@@ -45,16 +80,37 @@ const Navigation = () => {
       if (error.code === 4902) {
         console.log('Network not found in MetaMask, attempting to add it')
         try {
+          const networkConfig = NETWORKS[selectedChainId]
           await window.ethereum.request({
             method: 'wallet_addEthereumChain',
             params: [{
               chainId: selectedChainId,
-              chainName: selectedChainId === '0x7A69' ? 'Hardhat' : 'Goerli',
-              rpcUrls: [selectedChainId === '0x7A69' ? 'http://127.0.0.1:8545' : 'https://goerli.infura.io/v3/YOUR_INFURA_KEY'],
+              chainName: networkConfig.name,
+              rpcUrls: [networkConfig.rpc],
+              nativeCurrency: {
+                name: 'Ether',
+                symbol: 'ETH',
+                decimals: 18,
+              },
             }],
+          })
+          console.log('Network added successfully')
+          // Try switching again after adding
+          await window.ethereum.request({
+            method: 'wallet_switchEthereumChain',
+            params: [{ chainId: selectedChainId }],
           })
         } catch (addError) {
           console.error('Error adding network:', addError)
+          // Reset the selector to the current chain
+          if (selectRef.current && chainId) {
+            selectRef.current.value = `0x${chainId.toString(16)}`
+          }
+        }
+      } else {
+        // Reset the selector to the current chain on other errors
+        if (selectRef.current && chainId) {
+          selectRef.current.value = `0x${chainId.toString(16)}`
         }
       }
     }
@@ -76,14 +132,26 @@ const Navigation = () => {
         <div className="d-flex justify-content-end mt-3">
 
           <Form.Select
+              ref={selectRef}
               aria-label="Network Selector"
-              value={config[chainId] ? `0x${chainId.toString(16)}` : `0`}
+              value={chainId ? `0x${chainId.toString(16)}` : `0`}
               onChange={networkHandler}
               style={{ maxWidth: '200px', marginRight: '20px' }}
           >
               <option value="0" disabled>Select Network</option>
-              <option value="0x7A69">Localhost</option>
-              <option value="0x5">Goerli</option>
+              <optgroup label="Mainnet">
+                <option value="0x1">Ethereum Mainnet</option>
+                <option value="0x89">Polygon</option>
+                <option value="0xa4b1">Arbitrum One</option>
+                <option value="0xa">Optimism</option>
+                <option value="0x8453">Base</option>
+              </optgroup>
+              <optgroup label="Testnet">
+                <option value="0x5">Goerli Testnet</option>
+              </optgroup>
+              <optgroup label="Local">
+                <option value="0x7A69">Hardhat Localhost</option>
+              </optgroup>
           </Form.Select>
         
           {account ? (
