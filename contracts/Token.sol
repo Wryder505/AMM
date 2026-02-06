@@ -6,9 +6,9 @@ import "hardhat/console.sol";
 /// @title Token - A simple ERC20 token implementation
 /// @notice This contract implements basic ERC20 functionality with security considerations
 contract Token {
-    string public name;
-    string public symbol;
-    uint256 public decimals = 18;
+    string private _name;
+    string private _symbol;
+    uint256 private _decimals = 18;
     uint256 public totalSupply;
 
     mapping(address => uint256) public balanceOf;
@@ -27,23 +27,40 @@ contract Token {
     );
 
     /// @notice Initialize the token with name, symbol, and total supply
-    /// @param _name The name of the token
-    /// @param _symbol The symbol of the token
-    /// @param _totalSupply The total supply (will be multiplied by 10^18)
+    /// @param name_ The name of the token
+    /// @param symbol_ The symbol of the token
+    /// @param totalSupply_ The total supply (will be multiplied by 10^18)
     constructor(
-        string memory _name,
-        string memory _symbol,
-        uint256 _totalSupply
+        string memory name_,
+        string memory symbol_,
+        uint256 totalSupply_
     ) {
-        require(bytes(_name).length > 0, "Name cannot be empty");
-        require(bytes(_symbol).length > 0, "Symbol cannot be empty");
-        require(_totalSupply > 0, "Total supply must be greater than 0");
+        require(bytes(name_).length > 0, "Name cannot be empty");
+        require(bytes(symbol_).length > 0, "Symbol cannot be empty");
+        require(totalSupply_ > 0, "Total supply must be greater than 0");
 
-        name = _name;
-        symbol = _symbol;
-        totalSupply = _totalSupply * (10**decimals);
+        _name = name_;
+        _symbol = symbol_;
+        totalSupply = totalSupply_ * (10**_decimals);
         balanceOf[msg.sender] = totalSupply;
     }
+
+    /// @notice Returns the name of the token
+    function name() public view returns (string memory) {
+        return _name;
+    }
+
+    /// @notice Returns the symbol of the token
+    function symbol() public view returns (string memory) {
+        return _symbol;
+    }
+
+    /// @notice Returns the decimals places of the token
+    function decimals() public view returns (uint256) {
+        return _decimals;
+    }
+
+    // ...existing code...
 
     /// @notice Transfer tokens from sender to recipient
     /// @param _to Recipient address

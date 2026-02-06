@@ -37,38 +37,30 @@ function App() {
       window.ethereum.on('chainChanged', async () => {
         // Reload blockchain data when network changes
         const newChainId = await loadNetwork(provider, dispatch)
-        await loadTokens(provider, newChainId, dispatch)
-        const amm = await loadAMM(provider, newChainId, dispatch)
-        
-        // Load account and balances for new network
+
+        // Only load contracts if an account is already connected
         const account = await loadAccount(dispatch)
-        if (amm && account) {
-          await loadTokens(provider, newChainId, dispatch)
+        if (account) {
+          const tokens = await loadTokens(provider, newChainId, dispatch)
+          const amm = await loadAMM(provider, newChainId, dispatch)
+          if (tokens && amm) {
+            await loadBalances(amm, tokens, account, dispatch)
+          }
         }
       })
       
       window.ethereum.on('accountsChanged', async () => {
-        await loadAccount(dispatch)
-      })
-    }
-    
-    // Initiate contracts
-    await loadTokens(provider, chainId, dispatch)
-    const amm = await loadAMM(provider, chainId, dispatch)
-    
-    // Auto-load account and balances on startup
-    try {
-      const account = await loadAccount(dispatch)
-      if (amm && account && account !== ethers.constants.AddressZero) {
-        console.log('Auto-loading balances for account:', account)
-        // Re-fetch tokens to ensure we have the token contracts
-        const tokensLoaded = await loadTokens(provider, chainId, dispatch)
-        if (tokensLoaded) {
-          await loadBalances(amm, tokensLoaded, account, dispatch)
+        console.log('Account changed in MetaMask')
+        const account = await loadAccount(dispatch)
+        if (account) {
+          const currentChainId = await loadNetwork(provider, dispatch)
+          const tokens = await loadTokens(provider, currentChainId, dispatch)
+          const amm = await loadAMM(provider, currentChainId, dispatch)
+          if (tokens && amm) {
+            await loadBalances(amm, tokens, account, dispatch)
+          }
         }
-      }
-    } catch (error) {
-      console.log('User has not connected wallet yet:', error.message)
+      })
     }
   }
 

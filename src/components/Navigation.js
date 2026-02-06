@@ -1,5 +1,5 @@
 import { useSelector, useDispatch } from 'react-redux'
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
 import Navbar from 'react-bootstrap/Navbar'
 import Form from 'react-bootstrap/Form'
 import Button from 'react-bootstrap/Button'
@@ -7,7 +7,7 @@ import Blockies from 'react-blockies'
 
 import logo from '../logo.png';
 
-import { loadAccount, loadBalances, loadTokens, loadAMM, loadNetwork } from '../store/interactions'
+import { loadProvider, loadAccount, loadBalances, loadTokens, loadAMM, loadNetwork } from '../store/interactions'
 
 import config from '../config.json'
 
@@ -52,17 +52,98 @@ const Navigation = () => {
 
   const dispatch = useDispatch()
   const selectRef = useRef(null)
+  const [connectError, setConnectError] = useState("")
+  const [isConnecting, setIsConnecting] = useState(false)
+
+  const ethereum = Array.isArray(window.ethereum?.providers)
+    ? (window.ethereum.providers.find(p => p.isTrust || p.isTrustWallet) || window.ethereum.providers[0])
+    : window.ethereum
 
   const connectHandler = async () => {
-    const account = await loadAccount(dispatch)
-    // Reload tokens and AMM for current network to get fresh contracts
-    if (provider && chainId) {
-      const tokens = await loadTokens(provider, chainId, dispatch)
-      const ammContract = await loadAMM(provider, chainId, dispatch)
-      
-      if (ammContract && tokens && tokens.length >= 2 && account) {
-        await loadBalances(ammContract, tokens, account, dispatch)
+    if (isConnecting) return
+    setConnectError("")
+    setIsConnecting(true)
+
+    if (!ethereum) {
+      setConnectError("Wallet provider not detected. Please install a wallet extension and refresh.")
+      setIsConnecting(false)
+      return
+    }
+
+    try {
+      // Ensure provider exists
+      const activeProvider = provider || await loadProvider(dispatch)
+
+      // Ask MetaMask to show the connect permissions dialog
+      try {
+        await ethereum.request({
+          method: 'wallet_requestPermissions',
+          params: [{ eth_accounts: {} }],
+        })
+      } catch (permError) {
+        if (permError?.code === -32002) {
+          setConnectError("A connection request is already pending. Open MetaMask and approve it.")
+          return
+        }
+        // Continue to normal request if permissions are not supported
       }
+
+      // Request account access
+      const currentAccount = await loadAccount(dispatch, { request: true })
+      if (!currentAccount) {
+        setConnectError("No accounts found. Please unlock MetaMask and try again.")
+        return
+      }
+
+      // Load network
+      const currentChainId = await loadNetwork(activeProvider, dispatch)
+
+      // If network is unsupported, switch to Hardhat Localhost
+      if (!config[currentChainId]) {
+        try {
+          await ethereum.request({
+            method: 'wallet_switchEthereumChain',
+            params: [{ chainId: '0x7A69' }],
+          })
+        } catch (switchError) {
+          if (switchError.code === 4902) {
+            await ethereum.request({
+              method: 'wallet_addEthereumChain',
+              params: [{
+                chainId: '0x7A69',
+                chainName: 'Hardhat Localhost',
+                rpcUrls: ['http://127.0.0.1:8545'],
+                nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+              }],
+            })
+          } else {
+            setConnectError("Unsupported network. Please switch to Hardhat Localhost.")
+            return
+          }
+        }
+      }
+
+      const refreshedChainId = await loadNetwork(activeProvider, dispatch)
+      const loadedTokens = await loadTokens(activeProvider, refreshedChainId, dispatch)
+      const loadedAmm = await loadAMM(activeProvider, refreshedChainId, dispatch)
+
+      if (!loadedTokens || !loadedAmm) {
+        setConnectError(
+          "Contracts not found on this network. Ensure MetaMask RPC is http://127.0.0.1:8545 and redeploy, then refresh."
+        )
+        return
+      }
+
+      await loadBalances(loadedAmm, loadedTokens, currentAccount, dispatch)
+    } catch (error) {
+      console.error('Failed to connect wallet:', error)
+      if (error?.code === -32002) {
+        setConnectError("A connection request is already pending. Open MetaMask and approve it.")
+      } else {
+        setConnectError("Failed to connect wallet. Please approve the connection in MetaMask and try again.")
+      }
+    } finally {
+      setIsConnecting(false)
     }
   }
 
@@ -75,7 +156,7 @@ const Navigation = () => {
 
     try {
       console.log(`Attempting to switch to network: ${selectedChainId}`)
-      await window.ethereum.request({
+      await ethereum.request({
         method: 'wallet_switchEthereumChain',
         params: [{ chainId: selectedChainId }],
       })
@@ -86,13 +167,13 @@ const Navigation = () => {
         try {
           const newChainId = parseInt(selectedChainId, 16)
           console.log(`Loading contracts for chain ${newChainId}`)
-          await loadTokens(provider, newChainId, dispatch)
+          const newTokens = await loadTokens(provider, newChainId, dispatch)
           const newAmm = await loadAMM(provider, newChainId, dispatch)
           const currentAccount = await loadAccount(dispatch)
           
           // Load balances for new network
-          if (newAmm && currentAccount) {
-            await loadBalances(newAmm, tokens, currentAccount, dispatch)
+          if (newAmm && newTokens && currentAccount) {
+            await loadBalances(newAmm, newTokens, currentAccount, dispatch)
           }
         } catch (reloadError) {
           console.error('Error reloading contracts after network switch:', reloadError)
@@ -106,7 +187,7 @@ const Navigation = () => {
         console.log('Network not found in MetaMask, attempting to add it')
         try {
           const networkConfig = NETWORKS[selectedChainId]
-          await window.ethereum.request({
+            await ethereum.request({
             method: 'wallet_addEthereumChain',
             params: [{
               chainId: selectedChainId,
@@ -121,7 +202,7 @@ const Navigation = () => {
           })
           console.log('Network added successfully')
           // Try switching again after adding
-          await window.ethereum.request({
+            await ethereum.request({
             method: 'wallet_switchEthereumChain',
             params: [{ chainId: selectedChainId }],
           })
@@ -131,12 +212,12 @@ const Navigation = () => {
             try {
               const newChainId = parseInt(selectedChainId, 16)
               console.log(`Loading contracts for chain ${newChainId}`)
-              await loadTokens(provider, newChainId, dispatch)
+              const newTokens = await loadTokens(provider, newChainId, dispatch)
               const newAmm = await loadAMM(provider, newChainId, dispatch)
               const currentAccount = await loadAccount(dispatch)
               
-              if (newAmm && currentAccount) {
-                await loadBalances(newAmm, tokens, currentAccount, dispatch)
+              if (newAmm && newTokens && currentAccount) {
+                await loadBalances(newAmm, newTokens, currentAccount, dispatch)
               }
             } catch (reloadError) {
               console.error('Error reloading contracts after network add:', reloadError)
@@ -173,13 +254,13 @@ const Navigation = () => {
 
         <div className="d-flex justify-content-end mt-3">
 
-          <Form.Select
+            <Form.Select
               ref={selectRef}
               aria-label="Network Selector"
-              value={chainId ? `0x${chainId.toString(16)}` : `0`}
+              defaultValue="0"
               onChange={networkHandler}
               style={{ maxWidth: '200px', marginRight: '20px' }}
-          >
+            >
               <option value="0" disabled>Select Network</option>
               <optgroup label="Mainnet">
                 <option value="0x1">Ethereum Mainnet</option>
@@ -210,7 +291,14 @@ const Navigation = () => {
               />
           </Navbar.Text>
         ) : (
-          <Button onClick={connectHandler}>Connect</Button>
+          <div>
+            <Button onClick={connectHandler} disabled={isConnecting}>
+              {isConnecting ? 'Connecting...' : 'Connect'}
+            </Button>
+            {connectError && (
+              <div style={{ color: 'red', marginTop: '0.5rem', fontSize: '0.95em' }}>{connectError}</div>
+            )}
+          </div>
         )}
 
         </div>

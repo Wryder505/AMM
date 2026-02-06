@@ -31,11 +31,41 @@ import TOKEN_ABI from '../abis/Token.json';
 import AMM_ABI from '../abis/AMM.json';
 import config from '../config.json';
 
-export const loadProvider = (dispatch) => {
-   const provider = new ethers.providers.Web3Provider(window.ethereum)
-   dispatch(setProvider(provider))
+// Prefer Trust Wallet when multiple injected providers exist
+const getPreferredProvider = () => {
+   const { ethereum } = window
+   if (!ethereum) return null
 
-   return provider
+   if (Array.isArray(ethereum.providers)) {
+      const trust = ethereum.providers.find(p => p.isTrust || p.isTrustWallet)
+      if (trust) return trust
+      return ethereum.providers[0]
+   }
+
+   return ethereum
+}
+
+// Wait for an injected provider to be available
+const waitForProvider = async () => {
+   for (let i = 0; i < 20; i++) {
+      const provider = getPreferredProvider()
+      if (provider) return provider
+      await new Promise(resolve => setTimeout(resolve, 100))
+   }
+   throw new Error('Wallet provider not detected. Please install a wallet extension.')
+}
+
+export const loadProvider = async (dispatch) => {
+   try {
+      // Wait for injected provider (prefer Trust Wallet)
+      const ethereum = await waitForProvider()
+      const provider = new ethers.providers.Web3Provider(ethereum)
+      dispatch(setProvider(provider))
+      return provider
+   } catch (error) {
+      console.error('Error loading provider:', error)
+      throw error
+   }
 }
 
 export const loadNetwork = async (provider, dispatch) => {
@@ -45,13 +75,35 @@ export const loadNetwork = async (provider, dispatch) => {
    return chainId
 }
 
-export const loadAccount = async (dispatch) => {
-   const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' })
-   const account = ethers.utils.getAddress(accounts[0])
-   dispatch(setAccount(account))
+// Flag to prevent duplicate account requests
+let accountRequestPending = false
 
-   return account
+export const loadAccount = async (dispatch, options = { request: false }) => {
+   try {
+      const method = options?.request ? 'eth_requestAccounts' : 'eth_accounts'
+      const ethereum = getPreferredProvider() || window.ethereum
+      if (!ethereum) {
+         console.warn('No injected provider available')
+         return null
+      }
+      const accounts = await ethereum.request({ method })
+      if (accounts && accounts.length > 0) {
+         const account = accounts[0]
+         dispatch(setAccount(account))
+         return account
+      } else {
+         console.warn('No accounts found')
+         return null
+      }
+   } catch (error) {
+      console.error('Error loading account:', error)
+      if (options?.request) {
+         throw error
+      }
+      return null
+   }
 }
+
 
 /////////////////////////////////////// LOAD CONTRACTS //////////////////////////////////////
 
@@ -62,8 +114,29 @@ export const loadTokens = async (provider, chainId, dispatch) => {
          return null
       }
       
-      const mensa = new ethers.Contract(config[chainId].mensa.address, TOKEN_ABI, provider)
-      const usd = new ethers.Contract(config[chainId].usd.address, TOKEN_ABI, provider)
+      const mensaAddress = config[chainId].mensa.address
+      const usdAddress = config[chainId].usd.address
+
+      try {
+         const [mensaCode, usdCode] = await Promise.all([
+            provider.getCode(mensaAddress),
+            provider.getCode(usdAddress)
+         ])
+
+         if (mensaCode === '0x' || usdCode === '0x') {
+            console.warn('Token contracts not found at configured addresses. Check your RPC/network and redeploy if needed.')
+            return null
+         }
+      } catch (codeError) {
+         if (String(codeError?.message || '').includes('eth_getCode')) {
+            console.warn('Provider does not support eth_getCode; skipping contract code check.')
+         } else {
+            throw codeError
+         }
+      }
+
+      const mensa = new ethers.Contract(mensaAddress, TOKEN_ABI, provider)
+      const usd = new ethers.Contract(usdAddress, TOKEN_ABI, provider)
 
       dispatch(setContracts([mensa, usd]))
       dispatch(setSymbols([await mensa.symbol(), await usd.symbol()]))
@@ -81,7 +154,22 @@ export const loadAMM = async (provider, chainId, dispatch) => {
          return null
       }
       
-      const amm = new ethers.Contract(config[chainId].amm.address, AMM_ABI, provider)
+      const ammAddress = config[chainId].amm.address
+      try {
+         const ammCode = await provider.getCode(ammAddress)
+         if (ammCode === '0x') {
+            console.warn('AMM contract not found at configured address. Check your RPC/network and redeploy if needed.')
+            return null
+         }
+      } catch (codeError) {
+         if (String(codeError?.message || '').includes('eth_getCode')) {
+            console.warn('Provider does not support eth_getCode; skipping contract code check.')
+         } else {
+            throw codeError
+         }
+      }
+
+      const amm = new ethers.Contract(ammAddress, AMM_ABI, provider)
       
       dispatch(setContract(amm))
 

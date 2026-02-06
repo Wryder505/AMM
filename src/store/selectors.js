@@ -1,4 +1,5 @@
 import { createSelector } from 'reselect'
+import { ethers } from 'ethers'
 
 const tokens = state => state.tokens.contracts
 const swaps = state => state.amm.swaps
@@ -37,7 +38,10 @@ const decorateSwap = (swap) => {
 
 	const precision = 100000
 
-	let rate = (swap.args.token2Balance / swap.args.token1Balance)
+	const token1Balance = Number(ethers.utils.formatUnits(swap.args.token1Balance.toString(), 'ether'))
+	const token2Balance = Number(ethers.utils.formatUnits(swap.args.token2Balance.toString(), 'ether'))
+
+	let rate = token1Balance > 0 ? (token2Balance / token1Balance) : 0
 
 	rate = Math.round(rate * precision) / precision
 
